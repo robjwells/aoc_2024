@@ -1,5 +1,7 @@
 use crate::util::Answer;
 
+use itertools::Itertools;
+
 pub fn solve(input: &str) -> String {
     let reports = parse_reports(input);
     let p1 = part_one(&reports);
@@ -12,14 +14,14 @@ pub fn solve(input: &str) -> String {
 fn part_one(reports: &[Vec<i32>]) -> usize {
     reports
         .iter()
-        .filter(|report| check_report(report).is_safe())
+        .filter(|report| report_is_safe(report))
         .count()
 }
 
 fn part_two(reports: &[Vec<i32>]) -> usize {
     reports
         .iter()
-        .filter(|report| check_report_dampened(report).is_safe())
+        .filter(|report| dampened_report_is_safe(report))
         .count()
 }
 
@@ -32,63 +34,38 @@ fn parse_reports(input: &str) -> Vec<Vec<i32>> {
     input.lines().map(line_to_nums).collect()
 }
 
-fn signs_match(a: i32, b: i32) -> bool {
-    a.signum() == b.signum()
-}
-
-fn diff_in_range(level: i32) -> bool {
-    matches!(level.abs(), 1..=3)
-}
-
-fn check_report(report: &[i32]) -> Check {
-    let [first, second, rest @ ..] = report else {
-        unreachable!("Reports are always longer than 2 levels.")
-    };
-    let mut current = *second;
-    let mut last_diff = *first - *second;
-    if !diff_in_range(last_diff) {
-        return Check::Unsafe;
+fn report_is_safe(report: &[i32]) -> bool {
+    fn signs_match((a, b): (&i32, &i32)) -> bool {
+        a.signum() == b.signum()
     }
-    for next in rest.iter().copied() {
-        let diff = current - next;
-        if !(signs_match(diff, last_diff) && diff_in_range(diff)) {
-            return Check::Unsafe;
-        }
-        current = next;
-        last_diff = diff;
+
+    fn diff_in_range(level: &i32) -> bool {
+        matches!(level.abs(), 1..=3)
     }
-    Check::Safe
+
+    let diffs: Vec<i32> = report
+        .iter()
+        .tuple_windows()
+        .map(|(first, second)| first - second)
+        .collect();
+    let all_diffs_in_range = diffs.iter().all(diff_in_range);
+    let all_diffs_have_same_sign = diffs.iter().tuple_windows().all(signs_match);
+
+    all_diffs_in_range && all_diffs_have_same_sign
 }
 
-fn check_report_dampened(report: &[i32]) -> Check {
-    if check_report(report).is_safe() {
-        Check::Safe
+fn dampened_report_is_safe(report: &[i32]) -> bool {
+    if report_is_safe(report) {
+        true
     } else {
         for idx in 0..report.len() {
             let mut new_report = report.to_vec();
             new_report.remove(idx);
-            let check = check_report(&new_report);
-            if check.is_safe() {
-                return Check::Safe;
+            if report_is_safe(&new_report) {
+                return true;
             }
         }
-        Check::Unsafe
-    }
-}
-
-#[derive(Debug)]
-enum Check {
-    Safe,
-    Unsafe,
-}
-
-impl Check {
-    /// Returns `true` if the check is [`Safe`].
-    ///
-    /// [`Safe`]: Check::Safe
-    #[must_use]
-    fn is_safe(&self) -> bool {
-        matches!(self, Self::Safe)
+        false
     }
 }
 
@@ -96,7 +73,7 @@ impl Check {
 mod test {
     use rstest::rstest;
 
-    use crate::days::day02::check_report;
+    use crate::days::day02::report_is_safe;
 
     const SAMPLE_INPUT: &str = "\
 7 6 4 2 1
@@ -129,8 +106,7 @@ mod test {
     #[case(&[1, 3, 6, 7, 9])]
     #[trace]
     pub fn expected_safe_p1(#[case] report: &[i32]) {
-        let check = super::check_report(report);
-        assert!(check.is_safe());
+        assert!(super::report_is_safe(report));
     }
 
     #[rstest]
@@ -140,8 +116,7 @@ mod test {
     #[case(&[8, 6, 4, 4, 1])]
     #[trace]
     pub fn expected_unsafe_p1(#[case] report: &[i32]) {
-        let check = super::check_report(report);
-        assert!(!check.is_safe());
+        assert!(!super::report_is_safe(report));
     }
 
     #[rstest]
@@ -151,8 +126,7 @@ mod test {
     #[case(&[8, 6, 4, 4, 1])]
     #[trace]
     pub fn expected_safe_p2(#[case] report: &[i32]) {
-        let check = super::check_report_dampened(report);
-        assert!(check.is_safe());
+        assert!(super::dampened_report_is_safe(report));
     }
 
     #[rstest]
@@ -160,8 +134,7 @@ mod test {
     #[case(&[9, 7, 6, 2, 1])]
     #[trace]
     pub fn expected_unsafe_p2(#[case] report: &[i32]) {
-        let check = super::check_report_dampened(report);
-        assert!(!check.is_safe());
+        assert!(!super::dampened_report_is_safe(report));
     }
 
     #[test]
@@ -177,6 +150,6 @@ mod test {
     #[test]
     pub fn ensure_first_two_levels_are_checked() {
         let report = &[14, 10, 9, 6, 4, 3, 2, 1];
-        assert!(!check_report(report).is_safe());
+        assert!(!report_is_safe(report));
     }
 }
