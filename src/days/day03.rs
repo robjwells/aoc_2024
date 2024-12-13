@@ -1,3 +1,5 @@
+use regex::Regex;
+
 use crate::util::Answer;
 
 pub fn solve(input: &str) -> anyhow::Result<String> {
@@ -13,51 +15,55 @@ pub fn solve(input: &str) -> anyhow::Result<String> {
 fn part_one(input: &str) -> i32 {
     parse_instructions(input)
         .into_iter()
-        .map(Multiply::mul)
+        .filter_map(|ins| match ins {
+            Instruction::Multiply(a, b) => Some(a * b),
+            _ => None,
+        })
         .sum()
 }
 
 fn part_two(input: &str) -> i32 {
-    strict_parse_instructions(input)
+    use Instruction::{Do, Dont, Multiply};
+    use State::{Disabled, Enabled};
+    let (_, sum) = parse_instructions(input)
         .into_iter()
-        .map(Multiply::mul)
-        .sum()
+        .fold((Enabled, 0), |(state, sum), ins| match (state, ins) {
+            (Enabled, Multiply(a, b)) => (state, sum + a * b),
+            (Disabled, Multiply(_, _)) => (state, sum),
+            (_, Do) => (Enabled, sum),
+            (_, Dont) => (Disabled, sum),
+        });
+    sum
 }
 
-#[derive(Debug, PartialEq, Eq)]
-struct Multiply(i32, i32);
-
-impl Multiply {
-    fn mul(self) -> i32 {
-        self.0 * self.1
-    }
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+enum Instruction {
+    Do,
+    Dont,
+    Multiply(i32, i32),
 }
 
-fn parse_instructions(input: &str) -> Vec<Multiply> {
-    let mul_regex = regex::Regex::new(r"mul\((\d+),(\d+)\)").unwrap();
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+enum State {
+    Enabled,
+    Disabled,
+}
+
+fn parse_instructions(input: &str) -> Vec<Instruction> {
+    let mul_regex = Regex::new(r"do\(\)|don't\(\)|mul\((\d+),(\d+)\)").unwrap();
     let mut instructions = Vec::new();
     for m in mul_regex.captures_iter(input) {
-        let first: i32 = m.get(1).unwrap().as_str().parse().unwrap();
-        let second: i32 = m.get(2).unwrap().as_str().parse().unwrap();
-        instructions.push(Multiply(first, second));
-    }
-    instructions
-}
-
-fn strict_parse_instructions(input: &str) -> Vec<Multiply> {
-    let mul_regex = regex::Regex::new(r"do\(\)|don't\(\)|mul\((\d+),(\d+)\)").unwrap();
-    let mut instructions = Vec::new();
-    let mut enabled = true;
-    for m in mul_regex.captures_iter(input) {
-        let text = m.get(0).unwrap().as_str();
-        if text.starts_with("don't") {
-            enabled = false;
-        } else if text.starts_with("do") {
-            enabled = true;
-        } else if text.starts_with("mul") && enabled {
+        let match_text = m.get(0).unwrap().as_str();
+        if match_text.starts_with("don't") {
+            instructions.push(Instruction::Dont);
+        } else if match_text.starts_with("do") {
+            instructions.push(Instruction::Do);
+        } else if match_text.starts_with("mul") {
             let first: i32 = m.get(1).unwrap().as_str().parse().unwrap();
             let second: i32 = m.get(2).unwrap().as_str().parse().unwrap();
-            instructions.push(Multiply(first, second));
+            instructions.push(Instruction::Multiply(first, second));
+        } else {
+            unreachable!("Only do, don't and mul are matched by the regex.")
         }
     }
     instructions
@@ -65,20 +71,27 @@ fn strict_parse_instructions(input: &str) -> Vec<Multiply> {
 
 #[cfg(test)]
 mod test {
-    use super::Multiply;
+    use super::Instruction;
     use rstest::*;
 
     const SAMPLE_INPUT_P1: &str =
         "xmul(2,4)%&mul[3,7]!@^do_not_mul(5,5)+mul(32,64]then(mul(11,8)mul(8,5))";
-    const SAMPLE_INSTRUCTIONS: &[Multiply] = &[
-        Multiply(2, 4),
-        Multiply(5, 5),
-        Multiply(11, 8),
-        Multiply(8, 5),
+    const SAMPLE_INSTRUCTIONS: &[Instruction] = &[
+        Instruction::Multiply(2, 4),
+        Instruction::Multiply(5, 5),
+        Instruction::Multiply(11, 8),
+        Instruction::Multiply(8, 5),
     ];
     const SAMPLE_INPUT_P2: &str =
         "xmul(2,4)&mul[3,7]!^don't()_mul(5,5)+mul(32,64](mul(11,8)undo()?mul(8,5))";
-    const STRICT_SAMPLE_INSTRUCTIONS: &[Multiply] = &[Multiply(2, 4), Multiply(8, 5)];
+    const STRICT_SAMPLE_INSTRUCTIONS: &[Instruction] = &[
+        Instruction::Multiply(2, 4),
+        Instruction::Dont,
+        Instruction::Multiply(5, 5),
+        Instruction::Multiply(11, 8),
+        Instruction::Do,
+        Instruction::Multiply(8, 5),
+    ];
 
     #[fixture]
     #[once]
@@ -102,7 +115,7 @@ mod test {
     #[test]
     fn parse_sample_input_p2() {
         assert_eq!(
-            &super::strict_parse_instructions(SAMPLE_INPUT_P2),
+            &super::parse_instructions(SAMPLE_INPUT_P2),
             STRICT_SAMPLE_INSTRUCTIONS
         );
     }
