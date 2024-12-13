@@ -1,14 +1,19 @@
+use std::num::ParseIntError;
+
 use crate::util::Answer;
 
 use itertools::Itertools;
 
-pub fn solve(input: &str) -> String {
-    let reports = parse_reports(input);
+pub fn solve(input: &str) -> anyhow::Result<String> {
+    let reports = parse_reports(input)?;
+
     let p1 = part_one(&reports);
-    assert_eq!(p1, 257);
+    assert_eq!(p1, 257); // Known-correct answer
+
     let p2 = part_two(&reports);
-    assert_eq!(p2, 328);
-    Answer::first(2, p1).second(p2).to_string()
+    assert_eq!(p2, 328); // Known-correct answer
+
+    Answer::first(2, p1).second(p2).report()
 }
 
 fn part_one(reports: &[Vec<i32>]) -> usize {
@@ -25,11 +30,9 @@ fn part_two(reports: &[Vec<i32>]) -> usize {
         .count()
 }
 
-fn parse_reports(input: &str) -> Vec<Vec<i32>> {
-    fn line_to_nums(line: &str) -> Vec<i32> {
-        line.split_whitespace()
-            .map(|n| n.parse().unwrap())
-            .collect()
+fn parse_reports(input: &str) -> Result<Vec<Vec<i32>>, ParseIntError> {
+    fn line_to_nums(line: &str) -> Result<Vec<i32>, ParseIntError> {
+        line.split_whitespace().map(|n| n.parse()).collect()
     }
     input.lines().map(line_to_nums).collect()
 }
@@ -71,6 +74,8 @@ fn dampened_report_is_safe(report: &[i32]) -> bool {
 
 #[cfg(test)]
 mod test {
+    use std::num::ParseIntError;
+
     use rstest::rstest;
 
     use crate::days::day02::report_is_safe;
@@ -96,9 +101,10 @@ mod test {
     }
 
     #[test]
-    fn parse_sample_reports() {
-        let reports = super::parse_reports(SAMPLE_INPUT);
-        assert_eq!(reports, sample_reports())
+    fn parse_sample_reports() -> Result<(), ParseIntError> {
+        let reports = super::parse_reports(SAMPLE_INPUT)?;
+        assert_eq!(reports, sample_reports());
+        Ok(())
     }
 
     #[rstest]

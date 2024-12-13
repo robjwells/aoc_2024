@@ -17,6 +17,10 @@ impl Answer {
             first: answer.to_string(),
         }
     }
+
+    pub fn report(self) -> anyhow::Result<String> {
+        Ok(self.to_string())
+    }
 }
 
 impl PartialAnswer {
@@ -26,6 +30,11 @@ impl PartialAnswer {
             first: self.first,
             second: answer.to_string(),
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn report(self) -> anyhow::Result<String> {
+        Ok(self.to_string())
     }
 }
 
