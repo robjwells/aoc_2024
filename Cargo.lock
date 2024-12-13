@@ -26,6 +26,7 @@ dependencies = [
  "itertools",
  "nom",
  "nom-supreme",
+ "regex",
  "rstest",
  "tracing",
  "tracing-subscriber",
