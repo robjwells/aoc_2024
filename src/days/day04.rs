@@ -1,9 +1,5 @@
-#![allow(dead_code)]
-
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
-
-use tracing::instrument;
 
 use crate::util::Answer;
 
@@ -20,122 +16,128 @@ pub fn solve(input: &str) -> anyhow::Result<String> {
 }
 
 fn part_one(grid: &Grid) -> usize {
-    grid.find_xmas_positions().len()
+    grid.count_xmas_positions()
 }
 
 fn part_two(grid: &Grid) -> usize {
-    grid.find_cross_mas_positions().len()
+    grid.count_cross_mas_positions()
 }
 
 #[allow(dead_code)]
 #[derive(Debug, Default)]
 struct Grid {
+    // Using BTreeMaps/Sets over HashMaps/Sets as they're sorted by default,
+    // which makes debugging printed output a little easier.
     map: BTreeMap<(usize, usize), char>,
     by_char: BTreeMap<char, BTreeSet<(usize, usize)>>,
 }
 
 impl Grid {
-    #[allow(unused)]
     fn at(&self, pos: &(usize, usize)) -> Option<&char> {
         self.map.get(pos)
     }
 
-    const XMAS_DELTAS: [[(isize, isize); 3]; 8] = [
-        // Up and left.
-        [(-1, -1), (-2, -2), (-3, -3)],
-        // Up.
-        [(-1, 0), (-2, 0), (-3, 0)],
-        // Up and right.
-        [(-1, 1), (-2, 2), (-3, 3)],
-        // Right.
-        [(0, 1), (0, 2), (0, 3)],
-        // Down and right.
-        [(1, 1), (2, 2), (3, 3)],
-        // Down.
-        [(1, 0), (2, 0), (3, 0)],
-        // Down and left.
-        [(1, -1), (2, -2), (3, -3)],
-        // Left.
-        [(0, -1), (0, -2), (0, -3)],
-    ];
-
-    fn checked_tuple_add(
-        (x_row, x_col): (usize, usize),
-        (d_row, d_col): (isize, isize),
-    ) -> Option<(usize, usize)> {
-        let row = x_row.checked_add_signed(d_row)?;
-        let col = x_col.checked_add_signed(d_col)?;
-        Some((row, col))
+    fn check_char_at_position(&self, c: char, pos: &(usize, usize)) -> bool {
+        self.at(pos).is_some_and(|&v| v == c)
     }
 
-    fn deltas_to_valid_positions(
-        x: (usize, usize),
-        deltas: [(isize, isize); 3],
-    ) -> Option<[(usize, usize); 3]> {
-        let [md, ad, sd] = deltas;
-        let m = Self::checked_tuple_add(x, md)?;
-        let a = Self::checked_tuple_add(x, ad)?;
-        let s = Self::checked_tuple_add(x, sd)?;
-        Some([m, a, s])
+    fn deltas_to_valid_positions<const N: usize>(
+        anchor: (usize, usize),
+        deltas: [(isize, isize); N],
+    ) -> Option<[(usize, usize); N]> {
+        fn checked_tuple_add(
+            (x_row, x_col): (usize, usize),
+            (d_row, d_col): (isize, isize),
+        ) -> Option<(usize, usize)> {
+            let row = x_row.checked_add_signed(d_row)?;
+            let col = x_col.checked_add_signed(d_col)?;
+            Some((row, col))
+        }
+
+        let mapped = deltas.map(|d| checked_tuple_add(anchor, d));
+        mapped
+            .iter()
+            .all(Option::is_some)
+            .then(|| mapped.map(Option::unwrap))
     }
 
-    fn char_at_position(&self, c: char, pos: &(usize, usize)) -> bool {
-        self.at(pos).is_some_and(|v| v == &c)
+    fn count_xmas_from_x_position(&self, x_pos: (usize, usize)) -> usize {
+        // Sanity check.
+        assert!(
+            self.check_char_at_position('X', &x_pos),
+            "There is no X at {x_pos:?}"
+        );
+        // -mas deltas.
+        [
+            // Up and left.
+            [(-1, -1), (-2, -2), (-3, -3)],
+            // Up.
+            [(-1, 0), (-2, 0), (-3, 0)],
+            // Up and right.
+            [(-1, 1), (-2, 2), (-3, 3)],
+            // Right.
+            [(0, 1), (0, 2), (0, 3)],
+            // Down and right.
+            [(1, 1), (2, 2), (3, 3)],
+            // Down.
+            [(1, 0), (2, 0), (3, 0)],
+            // Down and left.
+            [(1, -1), (2, -2), (3, -3)],
+            // Left.
+            [(0, -1), (0, -2), (0, -3)],
+        ]
+        .into_iter()
+        .filter_map(|deltas| Self::deltas_to_valid_positions(x_pos, deltas))
+        .filter(|[m_pos, a_pos, s_pos]| {
+            self.check_char_at_position('M', m_pos)
+                && self.check_char_at_position('A', a_pos)
+                && self.check_char_at_position('S', s_pos)
+        })
+        .count()
     }
 
-    #[instrument(skip(self))]
-    fn valid_projections_from_x(&self, x_pos: (usize, usize)) -> Vec<[(usize, usize); 3]> {
-        Self::XMAS_DELTAS
-            .into_iter()
-            .filter_map(|deltas| Self::deltas_to_valid_positions(x_pos, deltas))
-            .filter(|[m_pos, a_pos, s_pos]| {
-                self.char_at_position('M', m_pos)
-                    && self.char_at_position('A', a_pos)
-                    && self.char_at_position('S', s_pos)
-            })
-            .collect()
-    }
-
-    #[instrument(skip(self))]
-    fn cross_mas_at_position(&self, a_pos: (usize, usize)) -> bool {
+    fn is_cross_mas_at_position(&self, a_pos: (usize, usize)) -> bool {
+        // Sanity check.
+        assert!(
+            self.check_char_at_position('A', &a_pos),
+            "There is no A at {a_pos:?}"
+        );
         let deltas: [(isize, isize); 4] = [(-1, -1), (-1, 1), (1, -1), (1, 1)];
-        let mapped = deltas.map(|d| Self::checked_tuple_add(a_pos, d));
-        let [Some(tl), Some(tr), Some(bl), Some(br)] = mapped else {
-            // Not all deltas are at valid positions.
+        let Some([top_left, top_right, bottom_left, bottom_right]) =
+            Self::deltas_to_valid_positions(a_pos, deltas)
+        else {
             return false;
         };
 
-        let tl_br_in_order = self.char_at_position('M', &tl) && self.char_at_position('S', &br);
-        let tl_br_reversed = self.char_at_position('S', &tl) && self.char_at_position('M', &br);
+        let tl_br_mas = self.check_char_at_position('M', &top_left)
+            && self.check_char_at_position('S', &bottom_right);
+        let tl_br_sam = self.check_char_at_position('S', &top_left)
+            && self.check_char_at_position('M', &bottom_right);
 
-        let bl_tr_in_order = self.char_at_position('M', &bl) && self.char_at_position('S', &tr);
-        let bl_tr_reversed = self.char_at_position('S', &bl) && self.char_at_position('M', &tr);
+        let bl_tr_mas = self.check_char_at_position('M', &bottom_left)
+            && self.check_char_at_position('S', &top_right);
+        let bl_tr_sam = self.check_char_at_position('S', &bottom_left)
+            && self.check_char_at_position('M', &top_right);
 
-        (tl_br_in_order || tl_br_reversed) && (bl_tr_in_order || bl_tr_reversed)
+        (tl_br_mas || tl_br_sam) && (bl_tr_mas || bl_tr_sam)
     }
 
-    #[instrument(skip(self))]
-    fn find_xmas_positions(&self) -> Vec<[(usize, usize); 4]> {
+    fn count_xmas_positions(&self) -> usize {
         self.by_char
             .get(&'X')
             .unwrap()
             .iter()
-            .flat_map(|&x| {
-                self.valid_projections_from_x(x)
-                    .into_iter()
-                    .map(move |[m, a, s]| [x, m, a, s])
-            })
-            .collect()
+            .map(|&x_pos| self.count_xmas_from_x_position(x_pos))
+            .sum()
     }
 
-    fn find_cross_mas_positions(&self) -> Vec<(usize, usize)> {
+    fn count_cross_mas_positions(&self) -> usize {
         self.by_char
             .get(&'A')
             .unwrap()
             .iter()
-            .filter(|&&a_pos| self.cross_mas_at_position(a_pos))
-            .copied()
-            .collect()
+            .filter(|&&a_pos| self.is_cross_mas_at_position(a_pos))
+            .count()
     }
 }
 
@@ -160,7 +162,6 @@ impl FromStr for Grid {
 #[cfg(test)]
 mod test {
     use super::Grid;
-    use rstest::{fixture, rstest};
 
     const SAMPLE_INPUT: &str = "\
 MMMSXXMASM
@@ -175,7 +176,7 @@ MAMMMXMMMM
 MXMXAXMASX
 ";
 
-    #[fixture]
+    #[rstest::fixture]
     #[once]
     fn setup_tracing() -> () {
         tracing_subscriber::fmt::init();
@@ -189,7 +190,7 @@ MXMXAXMASX
         Ok(())
     }
 
-    #[rstest]
+    #[test]
     fn solve_sample_part_one() -> anyhow::Result<()> {
         let grid: Grid = SAMPLE_INPUT.parse()?;
         assert_eq!(super::part_one(&grid), 18);
