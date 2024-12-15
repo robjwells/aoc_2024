@@ -9,6 +9,7 @@ const PUZZLE_INPUT: &[&str] = &[
     include_str!("../input/2024-02.txt"),
     include_str!("../input/2024-03.txt"),
     include_str!("../input/2024-04.txt"),
+    include_str!("../input/2024-05.txt"),
 ];
 
 type Solver = fn(&str) -> anyhow::Result<String>;
@@ -16,7 +17,13 @@ type Solver = fn(&str) -> anyhow::Result<String>;
 #[instrument]
 pub fn run(day: usize) -> anyhow::Result<String> {
     assert_ne!(day, 0, "Day must be >= 1.");
-    let days: &[Solver] = &[days::day01::solve, days::day02::solve, days::day03::solve, days::day04::solve];
+    let days: &[Solver] = &[
+        days::day01::solve,
+        days::day02::solve,
+        days::day03::solve,
+        days::day04::solve,
+        days::day05::solve,
+    ];
 
     let Some(day_fn) = days.get(day - 1) else {
         return Err(anyhow!("Day {day} is not implemented yet."));
