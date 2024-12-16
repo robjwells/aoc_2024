@@ -11,6 +11,7 @@ const PUZZLE_INPUT: &[&str] = &[
     include_str!("../input/2024-04.txt"),
     include_str!("../input/2024-05.txt"),
     include_str!("../input/2024-06.txt"),
+    include_str!("../input/2024-07.txt"),
 ];
 
 type Solver = fn(&str) -> anyhow::Result<String>;
@@ -25,6 +26,7 @@ pub fn run(day: usize) -> anyhow::Result<String> {
         days::day04::solve,
         days::day05::solve,
         days::day06::solve,
+        days::day07::solve,
     ];
 
     let Some(day_fn) = days.get(day - 1) else {
