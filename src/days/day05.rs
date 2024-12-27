@@ -122,8 +122,6 @@ mod parse {
 
 #[cfg(test)]
 mod test {
-    use rstest::fixture;
-
     use super::parse::Updates;
 
     const SAMPLE_INPUT: &str = "47|53
@@ -154,12 +152,6 @@ mod test {
 75,97,47,61,53
 61,13,29
 97,13,75,29,47";
-
-    #[fixture]
-    #[once]
-    fn setup_tracing() -> () {
-        tracing_subscriber::fmt::init();
-    }
 
     #[test]
     fn parse_sample_input() -> anyhow::Result<()> {

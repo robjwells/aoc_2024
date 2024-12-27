@@ -72,7 +72,6 @@ fn parse_instructions(input: &str) -> Vec<Instruction> {
 #[cfg(test)]
 mod test {
     use super::Instruction;
-    use rstest::*;
 
     const SAMPLE_INPUT_P1: &str =
         "xmul(2,4)%&mul[3,7]!@^do_not_mul(5,5)+mul(32,64]then(mul(11,8)mul(8,5))";
@@ -92,12 +91,6 @@ mod test {
         Instruction::Do,
         Instruction::Multiply(8, 5),
     ];
-
-    #[fixture]
-    #[once]
-    fn setup_tracing() -> () {
-        tracing_subscriber::fmt::init();
-    }
 
     #[test]
     fn parse_sample_input_p1() {

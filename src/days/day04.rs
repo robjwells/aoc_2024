@@ -23,7 +23,6 @@ fn part_two(grid: &Grid) -> usize {
     grid.count_cross_mas_positions()
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Default)]
 struct Grid {
     // Using BTreeMaps/Sets over HashMaps/Sets as they're sorted by default,
@@ -175,12 +174,6 @@ SAXAMASAAA
 MAMMMXMMMM
 MXMXAXMASX
 ";
-
-    #[rstest::fixture]
-    #[once]
-    fn setup_tracing() -> () {
-        tracing_subscriber::fmt::init();
-    }
 
     #[test]
     fn parse_sample_input() -> anyhow::Result<()> {

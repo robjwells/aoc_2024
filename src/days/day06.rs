@@ -188,7 +188,6 @@ fn check_for_loop(grid: &Grid, extra_wall: Position, start_at: (Position, Direct
 #[cfg(test)]
 mod test {
     use super::{count_loops_with_new_walls, count_visited_positions, Direction, Grid, Position};
-    use rstest::{fixture, rstest};
 
     const SAMPLE_INPUT: &str = "\
 ....#.....
@@ -203,12 +202,6 @@ mod test {
 ......#...
 ";
 
-    #[fixture]
-    #[once]
-    fn setup_tracing() -> () {
-        tracing_subscriber::fmt::init();
-    }
-
     #[test]
     fn parse_sample_grid() -> anyhow::Result<()> {
         let grid: Grid = SAMPLE_INPUT.parse()?;
@@ -221,18 +214,16 @@ mod test {
         Ok(())
     }
 
-    #[rstest]
-    #[allow(unused_variables)]
-    fn trace_sample_grid(setup_tracing: &()) -> anyhow::Result<()> {
+    #[test]
+    fn trace_sample_grid() -> anyhow::Result<()> {
         let grid: Grid = SAMPLE_INPUT.parse()?;
         let n_visited = count_visited_positions(&grid);
         assert_eq!(n_visited, 41);
         Ok(())
     }
 
-    #[rstest]
-    #[allow(unused_variables)]
-    fn sample_grid_find_loops(setup_tracing: &()) -> anyhow::Result<()> {
+    #[test]
+    fn sample_grid_find_loops() -> anyhow::Result<()> {
         let grid: Grid = SAMPLE_INPUT.parse()?;
         let n_loops = count_loops_with_new_walls(&grid);
         assert_eq!(n_loops, 6);

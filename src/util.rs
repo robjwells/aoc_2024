@@ -54,3 +54,9 @@ impl Display for Answer {
         writeln!(f, "Part two: {:>14}", self.second)
     }
 }
+
+#[rstest::fixture]
+#[once]
+fn tracing_fixture() -> () {
+    tracing_subscriber::fmt::init();
+}
