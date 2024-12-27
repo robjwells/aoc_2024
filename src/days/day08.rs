@@ -1,8 +1,6 @@
 #![allow(dead_code)]
-use std::{
-    cmp::Ordering,
-    collections::{HashMap, HashSet},
-};
+use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
 
 use glam::IVec2;
 use itertools::Itertools;
@@ -11,8 +9,14 @@ use crate::util::Answer;
 
 pub fn solve(input: &str) -> anyhow::Result<String> {
     let grid: Grid = input.parse()?;
-    let p1 = grid.count_antinode_positions();
-    Answer::first(8, p1).report()
+
+    let p1 = grid.count_antinode_positions(AntinodeMethod::Simple);
+    assert_eq!(p1, 344, "Part one is not correct.");
+
+    let p2 = grid.count_antinode_positions(AntinodeMethod::Resonant);
+    assert_eq!(p2, 1182, "Part two is not correct.");
+
+    Answer::first(8, p1).second(p2).report()
 }
 
 #[derive(Clone, Debug)]
@@ -33,7 +37,7 @@ impl Grid {
         (0..self.height).contains(&row) && (0..self.width).contains(&col)
     }
 
-    fn antinode_positions_for_antenna(&self, antenna: char) -> Option<HashSet<Position>> {
+    fn simple_antinode_positions_for_antenna(&self, antenna: char) -> Option<HashSet<Position>> {
         let antennas = self.antenna_positions(antenna)?;
         let antinodes = antennas
             .iter()
@@ -47,10 +51,34 @@ impl Grid {
         Some(antinodes)
     }
 
-    fn count_antinode_positions(&self) -> usize {
+    fn resonant_antinode_positions_for_antenna(&self, antenna: char) -> Option<HashSet<Position>> {
+        let antennas = self.antenna_positions(antenna)?;
+        let antinodes = antennas
+            .iter()
+            .tuple_combinations()
+            .flat_map(|(first, second)| {
+                let diff = second - first;
+                let from_first = std::iter::successors(Some(*first), move |pos| {
+                    let next = pos - diff;
+                    self.in_bounds(&next).then_some(next)
+                });
+                let from_second = std::iter::successors(Some(*second), move |pos| {
+                    let next = pos + diff;
+                    self.in_bounds(&next).then_some(next)
+                });
+                from_first.chain(from_second)
+            })
+            .collect();
+        Some(antinodes)
+    }
+
+    fn count_antinode_positions(&self, method: AntinodeMethod) -> usize {
         self.antennas
             .keys()
-            .filter_map(|&a| self.antinode_positions_for_antenna(a))
+            .filter_map(|&a| match method {
+                AntinodeMethod::Simple => self.simple_antinode_positions_for_antenna(a),
+                AntinodeMethod::Resonant => self.resonant_antinode_positions_for_antenna(a),
+            })
             .reduce(|mut acc, next| {
                 acc.extend(next);
                 acc
@@ -58,6 +86,11 @@ impl Grid {
             .map(|set| set.len())
             .unwrap_or_default()
     }
+}
+
+enum AntinodeMethod {
+    Simple,
+    Resonant,
 }
 
 impl std::str::FromStr for Grid {
@@ -89,28 +122,24 @@ impl std::str::FromStr for Grid {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-struct Position {
-    pos: IVec2,
-}
+struct Position(IVec2);
 
 impl Position {
     fn new(row: i32, col: i32) -> Self {
-        Self {
-            pos: IVec2::new(row, col),
-        }
+        Self(IVec2::new(row, col))
     }
 
     fn row(&self) -> i32 {
-        self.pos.x
+        self.0.x
     }
 
     fn col(&self) -> i32 {
-        self.pos.y
+        self.0.y
     }
 }
 
 impl Ord for Position {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> Ordering {
         match self.row().cmp(&other.row()) {
             Ordering::Less => Ordering::Less,
             Ordering::Equal => self.col().cmp(&other.col()),
@@ -135,7 +164,7 @@ impl std::ops::Sub for &Position {
     type Output = IVec2;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        self.pos - rhs.pos
+        self.0 - rhs.0
     }
 }
 
@@ -143,9 +172,7 @@ impl std::ops::Sub<IVec2> for &Position {
     type Output = Position;
 
     fn sub(self, rhs: IVec2) -> Self::Output {
-        Position {
-            pos: self.pos - rhs,
-        }
+        Position(self.0 - rhs)
     }
 }
 
@@ -153,9 +180,7 @@ impl std::ops::Add<IVec2> for &Position {
     type Output = Position;
 
     fn add(self, rhs: IVec2) -> Self::Output {
-        Position {
-            pos: self.pos + rhs,
-        }
+        Position(self.0 + rhs)
     }
 }
 
@@ -165,7 +190,7 @@ mod test {
 
     use rstest::{fixture, rstest};
 
-    use super::{Grid, Position};
+    use super::{AntinodeMethod, Grid, Position};
 
     const SAMPLE_GRID_INPUT: &str = "\
 ..........
@@ -223,14 +248,22 @@ mod test {
 
     #[rstest]
     pub fn antinode_positions_for_a_part_one(sample_grid: &Grid) {
-        let antinodes = sample_grid.antinode_positions_for_antenna('a').unwrap();
+        let antinodes = sample_grid
+            .simple_antinode_positions_for_antenna('a')
+            .unwrap();
         let expected = HashSet::from([Position::new(1, 3), Position::new(7, 6)]);
         assert_eq!(antinodes, expected);
     }
 
     #[rstest]
     pub fn test_count_unique_antinode_positions_part_one(sample_large_grid: &Grid) {
-        let answer = sample_large_grid.count_antinode_positions();
+        let answer = sample_large_grid.count_antinode_positions(AntinodeMethod::Simple);
         assert_eq!(answer, 14);
+    }
+
+    #[rstest]
+    pub fn test_count_unique_antinode_positions_part_two(sample_large_grid: &Grid) {
+        let answer = sample_large_grid.count_antinode_positions(AntinodeMethod::Resonant);
+        assert_eq!(answer, 34);
     }
 }
