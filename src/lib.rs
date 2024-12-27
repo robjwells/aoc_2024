@@ -1,5 +1,4 @@
 use anyhow::anyhow;
-use tracing::instrument;
 
 pub mod days;
 mod util;
@@ -12,11 +11,12 @@ const PUZZLE_INPUT: &[&str] = &[
     include_str!("../input/2024-05.txt"),
     include_str!("../input/2024-06.txt"),
     include_str!("../input/2024-07.txt"),
+    include_str!("../input/2024-08.txt"),
 ];
 
 type Solver = fn(&str) -> anyhow::Result<String>;
 
-#[instrument]
+#[tracing::instrument]
 pub fn run(day: usize) -> anyhow::Result<String> {
     assert_ne!(day, 0, "Day must be >= 1.");
     let days: &[Solver] = &[
@@ -27,6 +27,7 @@ pub fn run(day: usize) -> anyhow::Result<String> {
         days::day05::solve,
         days::day06::solve,
         days::day07::solve,
+        days::day08::solve,
     ];
 
     let Some(day_fn) = days.get(day - 1) else {
