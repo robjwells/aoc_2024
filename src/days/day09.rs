@@ -1,94 +1,49 @@
-use std::{ops::Index, str::FromStr};
-
 use crate::util::Answer;
 
 pub fn solve(input: &str) -> anyhow::Result<String> {
-    let dm: DenseMap = input.parse()?;
+    let mut dm: DiskMap = input.parse()?;
 
-    let p1 = part_one(&dm);
+    let p1 = part_one(&mut dm);
     assert_eq!(p1, 6395800119709, "Part one is not correct.");
 
-    Answer::first(9, p1).report()
+    let p2 = part_two(&mut dm);
+    assert_eq!(p2, 6418529470362, "Part two is not correct.");
+
+    Answer::first(9, p1).second(p2).report()
 }
 
-fn part_one(dm: &DenseMap) -> usize {
-    let mut sm = dm.expand();
-    sm.compact_blocks();
-    sm.checksum()
+fn part_one(dm: &mut DiskMap) -> usize {
+    dm.compact_blocks();
+    dm.blocks_checksum()
+}
+
+fn part_two(dm: &mut DiskMap) -> usize {
+    dm.compact_files();
+    dm.files_checksum()
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+struct File {
+    start_pos: usize,
+    file_id: usize,
+    length: usize,
+}
+
+impl File {
+    #[allow(dead_code)]
+    fn new(start_pos: usize, file_id: usize, length: usize) -> Self {
+        Self {
+            start_pos,
+            file_id,
+            length,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum Sector {
-    File { id: usize, length: u8 },
-    Free { length: u8 },
-}
-
-#[derive(Debug, Clone)]
-struct DenseMap(Vec<Sector>);
-
-impl DenseMap {
-    fn expand(&self) -> SparseMap {
-        let expanded_len = self
-            .0
-            .iter()
-            .map(|s| match s {
-                Sector::File { id: _, length } => *length as usize,
-                Sector::Free { length } => *length as usize,
-            })
-            .sum::<usize>();
-        let mut sparse = Vec::with_capacity(expanded_len);
-        for sector in &self.0 {
-            let it = match sector {
-                Sector::File { id, length } => {
-                    std::iter::repeat_n(Block::File { id: *id }, *length as usize)
-                }
-                Sector::Free { length } => std::iter::repeat_n(Block::Free, *length as usize),
-            };
-            sparse.extend(it);
-        }
-
-        SparseMap(sparse)
-    }
-}
-
-impl FromStr for DenseMap {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let all: Vec<u8> = s.trim().bytes().map(|b| b - 48).collect();
-        let mut res = Vec::with_capacity(all.len());
-        let mut ids = 0..;
-
-        for chunk in all.chunks(2) {
-            if let [file_length, free_length] = chunk {
-                let file = Sector::File {
-                    id: ids.next().unwrap(),
-                    length: *file_length,
-                };
-                let free = Sector::Free {
-                    length: *free_length,
-                };
-                res.push(file);
-                res.push(free);
-            } else if let [file_length] = chunk {
-                let file = Sector::File {
-                    id: ids.next().unwrap(),
-                    length: *file_length,
-                };
-                res.push(file);
-            }
-        }
-
-        Ok(Self(res))
-    }
-}
-
-impl Index<usize> for DenseMap {
-    type Output = Sector;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.0[index]
-    }
+struct Space {
+    start_pos: usize,
+    length: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -108,90 +63,204 @@ impl Block {
 }
 
 #[derive(Debug, Clone)]
-struct SparseMap(Vec<Block>);
+struct DiskMap {
+    sparse_map: Vec<Block>,
+    files: Vec<File>,
+    spaces: Vec<Space>,
+}
 
-impl SparseMap {
+impl DiskMap {
     fn compact_blocks(&mut self) {
-        let forward = 0..self.0.len();
+        let forward = 0..self.sparse_map.len();
         let mut backward = forward.clone().rev();
 
         for front_idx in forward {
-            if self.0[front_idx].is_file() {
+            // Skip any files blocks.
+            if self.sparse_map[front_idx].is_file() {
                 continue;
             }
-            // Now we're at free space.
-            // So find the next file block at the end.
-            let Some(back_idx) = backward.find(|idx| self.0[*idx].is_file()) else {
+            // Now we have a space block, find the next file block at the end.
+            let Some(back_idx) = backward.find(|idx| self.sparse_map[*idx].is_file()) else {
                 return; // Exhausted the files.
             };
             if back_idx <= front_idx {
-                // We're finished.
+                // Our back cursor is before our front cursor, which means
+                // there's no further compaction to perform.
                 return;
             }
-            self.0.swap(front_idx, back_idx);
+            // Swap the file block into the space block.
+            self.sparse_map.swap(front_idx, back_idx);
         }
     }
 
-    fn checksum(&self) -> usize {
-        self.0
+    fn blocks_checksum(&self) -> usize {
+        self.sparse_map
             .iter()
             .take_while(|b| b.is_file())
             .map(|b| match b {
                 Block::File { id } => *id,
-                _ => 0,
+                _ => unreachable!(),
             })
             .enumerate()
             .map(|(idx, id)| idx * id)
             .sum()
     }
+
+    fn compact_files(&mut self) {
+        for file in self.files.iter_mut().rev() {
+            // For each file, starting at the end,
+            for space_index in 0..self.spaces.len() {
+                // find an appropriate space, starting at the front, such that:
+                let space = &mut self.spaces[space_index];
+                // it is placed before the file,
+                if space.start_pos > file.start_pos {
+                    break;
+                }
+                // it can accommodate the length of the file,
+                if space.length >= file.length {
+                    file.start_pos = space.start_pos;
+                    if space.length == file.length {
+                        // perfectly,
+                        self.spaces.remove(space_index);
+                    } else {
+                        // or with some remaining space.
+                        space.start_pos += file.length;
+                        space.length -= file.length;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    fn files_checksum(&self) -> usize {
+        self.files
+            .iter()
+            .flat_map(|f| {
+                // Pair each occupied position with the occupying file's ID.
+                let positions = f.start_pos..(f.start_pos + f.length);
+                let repeated_id = std::iter::repeat(f.file_id);
+                positions.zip(repeated_id)
+            })
+            .map(|(pos, file_id)| pos * file_id)
+            .sum()
+    }
 }
 
-impl Index<usize> for SparseMap {
-    type Output = Block;
+impl std::str::FromStr for DiskMap {
+    type Err = anyhow::Error;
 
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.0[index]
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        const ASCII_CODE_FOR_ZERO: u8 = 0x30;
+        let all_lengths: Vec<usize> = s
+            .trim()
+            .bytes()
+            .map(|b| (b - ASCII_CODE_FOR_ZERO) as usize)
+            .collect();
+
+        let sparse_size = all_lengths.iter().sum();
+        let mut sparse_map: Vec<Block> = Vec::with_capacity(sparse_size);
+        let mut files: Vec<File> = Vec::with_capacity(all_lengths.len());
+        let mut spaces: Vec<Space> = Vec::with_capacity(all_lengths.len());
+
+        let is_file_iter = [true, false].into_iter().cycle();
+        let mut ids = 0..;
+        let mut start_pos = 0_usize;
+
+        for (is_file, length) in is_file_iter.zip(all_lengths.into_iter()) {
+            if is_file {
+                let file_id = ids.next().unwrap();
+                files.push(File {
+                    start_pos,
+                    file_id,
+                    length,
+                });
+                sparse_map.extend(std::iter::repeat_n(Block::File { id: file_id }, length));
+            } else {
+                spaces.push(Space { start_pos, length });
+                sparse_map.extend(std::iter::repeat_n(Block::Free, length));
+            }
+            start_pos += length;
+        }
+        Ok(Self {
+            sparse_map,
+            files,
+            spaces,
+        })
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{part_one, Block, DenseMap, Sector};
+    use super::{part_one, part_two, Block, DiskMap, File, Space};
 
     const SAMPLE_INPUT: &str = "2333133121414131402";
 
     #[test]
     fn test_parse_sample_input() -> anyhow::Result<()> {
-        let map: DenseMap = SAMPLE_INPUT.parse()?;
-        assert_eq!(map[0], Sector::File { id: 0, length: 2 });
-        assert_eq!(map[1], Sector::Free { length: 3 });
+        let map: DiskMap = SAMPLE_INPUT.parse()?;
+        assert_eq!(
+            map.files[0],
+            File {
+                start_pos: 0,
+                file_id: 0,
+                length: 2
+            }
+        );
+        assert_eq!(
+            map.spaces[0],
+            Space {
+                start_pos: 2,
+                length: 3
+            }
+        );
         Ok(())
     }
 
     #[test]
     fn test_sparse_from_sample_input() -> anyhow::Result<()> {
-        let map = SAMPLE_INPUT.parse::<DenseMap>()?.expand();
-        assert_eq!(map[0], Block::File { id: 0 });
-        assert_eq!(map[1], Block::File { id: 0 });
-        assert_eq!(map[2], Block::Free);
+        let map = SAMPLE_INPUT.parse::<DiskMap>()?;
+        assert_eq!(map.sparse_map[0], Block::File { id: 0 });
+        assert_eq!(map.sparse_map[1], Block::File { id: 0 });
+        assert_eq!(map.sparse_map[2], Block::Free);
         Ok(())
     }
 
     #[test]
     fn test_compact_blocks() -> anyhow::Result<()> {
-        let mut map = SAMPLE_INPUT.parse::<DenseMap>()?.expand();
+        let mut map = SAMPLE_INPUT.parse::<DiskMap>()?;
         map.compact_blocks();
-        assert_eq!(map[0], Block::File { id: 0 });
-        assert_eq!(map[1], Block::File { id: 0 });
-        assert_eq!(map[2], Block::File { id: 9 });
+        assert_eq!(map.sparse_map[0], Block::File { id: 0 });
+        assert_eq!(map.sparse_map[1], Block::File { id: 0 });
+        assert_eq!(map.sparse_map[2], Block::File { id: 9 });
         Ok(())
     }
 
     #[test]
-    fn test_compact() -> anyhow::Result<()> {
-        let dm = SAMPLE_INPUT.parse::<DenseMap>()?;
-        let checksum = part_one(&dm);
+    fn test_block_compact_checksum() -> anyhow::Result<()> {
+        let mut dm = SAMPLE_INPUT.parse::<DiskMap>()?;
+        let checksum = part_one(&mut dm);
         assert_eq!(checksum, 1928);
+        Ok(())
+    }
+
+    #[test]
+    fn test_sector_compact() -> anyhow::Result<()> {
+        let mut map = SAMPLE_INPUT.parse::<DiskMap>()?;
+        map.compact_files();
+        assert!(map.files.contains(&File::new(0, 0, 2)));
+        assert!(map.files.contains(&File::new(2, 9, 2)));
+        assert!(map.files.contains(&File::new(4, 2, 1)));
+        assert!(map.files.contains(&File::new(5, 1, 3)));
+        assert!(map.files.contains(&File::new(8, 7, 3)));
+        Ok(())
+    }
+
+    #[test]
+    fn test_sector_compact_checksum() -> anyhow::Result<()> {
+        let mut dm = SAMPLE_INPUT.parse::<DiskMap>()?;
+        let checksum = part_two(&mut dm);
+        assert_eq!(checksum, 2858);
         Ok(())
     }
 }
