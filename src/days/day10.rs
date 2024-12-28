@@ -83,7 +83,7 @@ struct Grid {
 }
 
 impl Grid {
-    fn next_positions(&self, trail: Trail) -> Vec<(Position, u8)> {
+    fn next_trails(&self, trail: Trail) -> impl Iterator<Item = Trail> + use<'_> {
         let Position { row, col } = trail.current_position;
         [
             Position { row: row - 1, col },
@@ -92,30 +92,29 @@ impl Grid {
             Position { row, col: col + 1 },
         ]
         .into_iter()
-        .filter_map(|pos| {
+        .filter_map(move |pos| {
             self.map
                 .get(&pos)
                 .filter(|&&height| height == trail.current_height + 1)
-                .map(|height| (pos, *height))
+                .map(|height| trail.new_with_next(pos, *height))
         })
-        .collect()
     }
 
     fn produce_hiking_guides(&self) -> Vec<HikingGuide> {
-        let mut queue = VecDeque::from(self.trail_starts.clone());
+        let mut queue = VecDeque::with_capacity(1024);
+        queue.extend(self.trail_starts.clone());
+
         let mut complete: HashMap<Position, Vec<Trail>> = HashMap::with_capacity(queue.len());
 
         while let Some(trail) = queue.pop_front() {
             if trail.is_complete() {
-                complete.entry(trail.head).or_default().push(trail);
+                complete
+                    .entry(trail.head)
+                    .or_insert_with(|| Vec::with_capacity(32))
+                    .push(trail);
                 continue;
             }
-
-            let new_trails = self
-                .next_positions(trail)
-                .into_iter()
-                .map(|(pos, height)| trail.new_with_next(pos, height));
-            queue.extend(new_trails);
+            queue.extend(self.next_trails(trail));
         }
 
         complete
@@ -143,7 +142,7 @@ impl std::str::FromStr for Grid {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut map = HashMap::new();
+        let mut map = HashMap::with_capacity(s.len());
         let mut trail_starts = Vec::new();
 
         for (row_idx, row) in s.trim().lines().enumerate() {
