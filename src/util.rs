@@ -41,17 +41,17 @@ impl PartialAnswer {
 impl Display for PartialAnswer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Day {}", self.day)?;
-        writeln!(f, "========================")?;
-        writeln!(f, "Part one: {:>14}", self.first)
+        writeln!(f, "==========================")?;
+        writeln!(f, "Part one: {:>16}", self.first)
     }
 }
 
 impl Display for Answer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Day {}", self.day)?;
-        writeln!(f, "========================")?;
-        writeln!(f, "Part one: {:>14}", self.first)?;
-        writeln!(f, "Part two: {:>14}", self.second)
+        writeln!(f, "==========================")?;
+        writeln!(f, "Part one: {:>16}", self.first)?;
+        writeln!(f, "Part two: {:>16}", self.second)
     }
 }
 
